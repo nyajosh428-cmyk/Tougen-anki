@@ -16,14 +16,39 @@ jobs:
 
       - name: Unzip src.zip and tools.zip
         run: |
+          mkdir -p src tools
           if [ -f src.zip ]; then
-            if unzip -l src.zip | awk 'NR>3{print $4}' | grep -q '^src/'; then unzip -oq src.zip; else unzip -oq src.zip -d src; fi
+            unzip -oq src.zip -d unz_src
+            if [ -d unz_src/src ]; then cp -r unz_src/src/. src/; else cp -r unz_src/. src/; fi
+            rm -rf unz_src
             git rm -q src.zip
           fi
           if [ -f tools.zip ]; then
-            if unzip -l tools.zip | awk 'NR>3{print $4}' | grep -q '^tools/'; then unzip -oq tools.zip; else unzip -oq tools.zip -d tools; fi
+            unzip -oq tools.zip -d unz_tools
+            if [ -d unz_tools/tools ]; then cp -r unz_tools/tools/. tools/; else cp -r unz_tools/. tools/; fi
+            rm -rf unz_tools
             git rm -q tools.zip
           fi
           printf '.gradle/\nbuild/\nrun/\nout/\n.idea/\n*.iml\n.classpath\n.project\n.settings/\nbin/\neclipse/\n__pycache__/\n' > .gitignore
-          test -d src/main || { echo "src/main not found"; find . -maxdepth 3 -not -path './.git/*'; exit 1; }
-          git config user.name "github-actions
+          [ -d src/main ] || (find . -maxdepth 3 -not -path './.git/*'; exit 1)
+          git config user.name github-actions
+          git config user.email actions@github.com
+          git add -A
+          git diff --cached --quiet || git commit -m 'Unzip project files'
+          git push
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.1.1
+
+      - run: gradle build --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tougen-jar
+          path: build/libs/*.jar
